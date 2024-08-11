@@ -1,0 +1,93 @@
+import numpy as np
+import matplotlib.pyplot as plt
+def read_csv(csv_path):
+    np_path_XYs = np.genfromtxt(csv_path, delimiter=',')
+    path_XYs = []
+    for i in np.unique(np_path_XYs[:, 0]):
+        npXYs = np_path_XYs[np_path_XYs[:, 0] == i][:, 1:]
+        XYs = []
+        for j in np.unique(npXYs[:, 0]):
+            XY = npXYs[npXYs[:, 0] == j][:, 1:]
+            XYs.append(XY)
+        path_XYs.append(XYs)
+    return path_XYs
+
+def plot(paths_XYs, regularized_shapes=None):
+    fig, ax = plt.subplots(tight_layout=True, figsize=(8, 8))
+    colours = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+    for i, XYs in enumerate(paths_XYs):
+        c = colours[i % len(colours)]
+        for XY in XYs:
+            ax.plot(XY[:, 0], XY[:, 1], c=c, linewidth=2)
+
+    if regularized_shapes:
+        for shape in regularized_shapes:
+            shape.plot(ax)
+
+    ax.set_aspect('equal')
+    plt.show()
+class Shape:
+    def plot(self, ax):
+        raise NotImplementedError("This method should be overridden by subclasses")
+
+class Line(Shape):
+    def _init_(self, points):
+        self.points = points
+
+    def plot(self, ax):
+        ax.plot(self.points[:, 0], self.points[:, 1], 'g-', linewidth=2)
+
+class Circle(Shape):
+    def _init_(self, center, radius):
+        self.center = center
+        self.radius = radius
+
+    def plot(self, ax):
+        circle = plt.Circle(self.center, self.radius, color='b', fill=False, linewidth=2)
+        ax.add_patch(circle)
+
+def regularize_shapes(paths_XYs):
+    regularized_shapes = []
+
+    for XYs in paths_XYs:
+        for XY in XYs:
+            if is_line(XY):
+                regularized_shapes.append(Line(XY))
+            elif is_circle(XY):
+                center, radius = fit_circle(XY)
+                regularized_shapes.append(Circle(center, radius))
+
+    return regularized_shapes
+
+def is_line(points, tolerance=0.01):
+    if len(points) < 2:
+        return False
+    v = points[-1] - points[0]
+    v /= np.linalg.norm(v)
+    for i in range(1, len(points) - 1):
+        v_i = points[i] - points[0]
+        v_i /= np.linalg.norm(v_i)
+        if not np.isclose(np.dot(v, v_i), 1, atol=tolerance):
+            return False
+    return True
+
+def fit_circle(points):
+    A = np.hstack([points, np.ones((points.shape[0], 1))])
+    b = np.sum(points**2, axis=1)
+    x = np.linalg.lstsq(A, b, rcond=None)[0]
+    center = x[:2] / 2
+    radius = np.sqrt(np.mean(np.sum((points - center)**2, axis=1)))
+    return center, radius
+
+def is_circle(points, tolerance=0.1):
+    if len(points) < 3:
+        return False
+    center, radius = fit_circle(points)
+    distances = np.linalg.norm(points - center, axis=1)
+    return np.all(np.isclose(distances, radius, atol=tolerance))
+paths_XYs = read_csv('Downloads/problems/problems/isolated.csv')
+plot(paths_XYs)
+
+regularized_shapes = regularize_shapes(paths_XYs)
+
+plot(paths_XYs, regularized_shapes)
